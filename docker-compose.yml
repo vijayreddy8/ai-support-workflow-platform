@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  backend:
+    build: ./server
+    ports:
+      - "5003:5003"
+    environment:
+      - PORT=5003
+    volumes:
+      - ./server/data:/app/data
+  frontend:
+    build: ./client
+    ports:
+      - "3003:80"
+    depends_on:
+      - backend

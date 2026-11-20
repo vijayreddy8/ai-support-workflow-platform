@@ -1,0 +1,87 @@
+{
+  "tickets": [
+    {
+      "id": "tkt-101",
+      "customerName": "Rohan Kulkarni",
+      "customerEmail": "rohan@acme-ind.in",
+      "subject": "Production API returning 502 on webhook retries",
+      "description": "Our production webhook endpoint started throwing 502 errors during peak traffic after deploy. Need urgent help.",
+      "status": "In Progress",
+      "assignee": "Sasidhar",
+      "category": "Cloud & API",
+      "priority": "Urgent",
+      "slaHours": 2,
+      "slaDeadline": "2026-11-20T10:40:08.876Z",
+      "sentiment": "Escalating",
+      "kbTitle": "API Latency, Webhook Retries & Deployment Health",
+      "suggestedReply": "Thanks for reporting this service issue. Our triage pipeline logged the error signature and checked upstream health/webhook delivery. Please share a sample request ID or timestamp so we can trace the exact span and close this out.",
+      "replies": [
+        {
+          "id": "rep-1",
+          "author": "Vijaysimha",
+          "text": "Checked upstream gateway logs—reproducing under burst load now.",
+          "createdAt": "2026-11-20T09:25:08.876Z"
+        },
+        {
+          "id": "rep-1795170822475",
+          "author": "Sasidhar",
+          "text": "Thanks for reporting this service issue. Our triage pipeline logged the error signature and checked upstream health/webhook delivery. Please share a sample request ID or timestamp so we can trace the exact span and close this out.",
+          "createdAt": "2026-11-20T10:33:42.475Z"
+        }
+      ],
+      "createdAt": "2026-11-20T08:40:08.876Z",
+      "updatedAt": "2026-11-20T10:33:42.477Z"
+    },
+    {
+      "id": "tkt-102",
+      "customerName": "Meera Nair",
+      "customerEmail": "meera@finledger.co.in",
+      "subject": "Need GST invoice for November cloud subscription",
+      "description": "Payment went through via UPI yesterday, please share the GST invoice PDF/details for accounting.",
+      "status": "In Progress",
+      "assignee": "Vijaysimha",
+      "category": "Billing & Invoices",
+      "priority": "High",
+      "slaHours": 6,
+      "slaDeadline": "2026-11-20T12:10:08.876Z",
+      "sentiment": "Constructive",
+      "kbTitle": "GST Invoices, Refunds & Failed Payment Recovery",
+      "suggestedReply": "Thanks for reaching out. I have checked your billing ticket and attached the GST invoice/payment reference details. If a duplicate charge occurred, our refund workflow initiates within 5–7 business days. Please confirm your transaction ID if you need a manual ledger check.",
+      "replies": [],
+      "createdAt": "2026-11-20T06:10:08.876Z",
+      "updatedAt": "2026-11-20T06:10:08.876Z"
+    },
+    {
+      "id": "tkt-103",
+      "customerName": "Arjun Verma",
+      "customerEmail": "arjun@cloudscale.dev",
+      "subject": "SSO token returning 403 for new QA member",
+      "description": "New developer account gets 403 forbidden when opening staging project dashboard.",
+      "status": "Resolved",
+      "assignee": "Sasidhar",
+      "category": "Auth & Access",
+      "priority": "High",
+      "slaHours": 6,
+      "slaDeadline": "2026-11-20T07:10:08.876Z",
+      "sentiment": "Neutral",
+      "kbTitle": "Authentication Errors, Token Expiry & Role Permissions",
+      "suggestedReply": "Thanks for flagging this access issue. Please verify that your session token or SSO role has not expired and that your workspace permissions are active. If the account is locked after repeated attempts, I can trigger a fresh verification flow right away.",
+      "replies": [
+        {
+          "id": "rep-2",
+          "author": "Sasidhar",
+          "text": "Updated workspace role mapping to Developer and verified login.",
+          "createdAt": "2026-11-20T04:10:08.876Z"
+        },
+        {
+          "id": "rep-1795169472310",
+          "author": "Sasidhar",
+          "text": "hi",
+          "createdAt": "2026-11-20T10:11:12.310Z"
+        }
+      ],
+      "createdAt": "2026-11-20T01:10:08.876Z",
+      "updatedAt": "2026-11-20T10:11:12.310Z"
+    }
+  ]
+}
