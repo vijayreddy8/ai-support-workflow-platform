@@ -9,19 +9,41 @@ import {
   addReplyHybrid,
   deleteTicketHybrid,
 } from './services/supportClient';
+import { Backdrop, Splash, Spot, Ring, Count, stagger, initialsOf, useNow } from './premium';
 
 const STATUSES = ['Open', 'In Progress', 'Resolved'];
 const PRIORITIES = ['Urgent', 'High', 'Medium', 'Low'];
 const AGENTS = ['Sasidhar', 'Vijaysimha'];
 
 const PRIORITY_BADGE = {
-  Urgent: 'bg-red-100 text-red-800 border-red-300',
-  High: 'bg-amber-100 text-amber-900 border-amber-300',
-  Medium: 'bg-sky-100 text-sky-900 border-sky-300',
-  Low: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+  Urgent: 'pri-Urgent',
+  High: 'pri-High',
+  Medium: 'pri-Medium',
+  Low: 'pri-Low',
+};
+
+const SLA_COLOR = { ok: '#34d399', warn: '#fbbf24', breach: '#fb7185', done: '#34d399' };
+
+const fmtSpan = (ms) => {
+  const m = Math.max(0, Math.round(ms / 60000));
+  const h = Math.floor(m / 60);
+  return h > 0 ? `${h}h ${m % 60}m` : `${m}m`;
+};
+
+// Presentation-only: derives a live SLA gauge from existing createdAt / slaDeadline / status fields.
+const slaInfo = (t, now) => {
+  const due = Date.parse(t.slaDeadline);
+  const start = Date.parse(t.createdAt);
+  if (t.status === 'Resolved') return { state: 'done', remainingPct: 100, label: 'Resolved' };
+  if (!Number.isFinite(due) || !Number.isFinite(start) || due <= start) return null;
+  const left = due - now;
+  const remainingPct = Math.max(0, Math.min(100, (left / (due - start)) * 100));
+  if (left <= 0) return { state: 'breach', remainingPct: 0, label: `Breached ${fmtSpan(-left)} ago` };
+  return { state: remainingPct < 25 ? 'warn' : 'ok', remainingPct, label: `${fmtSpan(left)} left` };
 };
 
 export default function App() {
+  const now = useNow(30000);
   const [tickets, setTickets] = useState([]);
   const [selectedId, setSelectedId] = useState('tkt-101');
   const [currentAgent, setCurrentAgent] = useState('Sasidhar');
@@ -105,258 +127,243 @@ export default function App() {
   const urgentCount = tickets.filter((t) => t.priority === 'Urgent' && t.status !== 'Resolved').length;
   const resolvedCount = tickets.filter((t) => t.status === 'Resolved').length;
 
+
+  const resolutionPct = tickets.length ? Math.round((resolvedCount / tickets.length) * 100) : 0;
+  const selSla = selectedTicket ? slaInfo(selectedTicket, now) : null;
+
   return (
-    <div className="min-h-screen bg-[#F6F5F0] text-stone-900">
-      {/* Top Bar */}
-      <header className="bg-white border-b border-stone-200 sticky top-0 z-20">
-        <div className="max-w-[1380px] mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-md bg-emerald-800 text-amber-50 flex items-center justify-center shadow-sm">
-              <Bot className="w-5 h-5" />
+    <>
+      <Backdrop />
+      <Splash icon={<Bot />} title="Helpdesk & Workflow Desk" subtitle="Automated triage · SLA timer · KB response drafts · Live stream" />
+      <div className="app-shell">
+        {/* Top Bar */}
+        <header className="hdr">
+          <div className="max-w-[1380px] mx-auto px-5 sm:px-8 py-4 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="brand-mark"><Bot className="w-6 h-6" /></div>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-extrabold">Helpdesk <span className="grad-text">& Workflow Desk</span></h1>
+                <p className="text-xs sm:text-sm mut mt-0.5">Automated triage · SLA timer · KB response drafts · Live stream</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-base sm:text-lg font-bold tracking-tight text-stone-900">
-                Helpdesk & Workflow Desk
-              </h1>
-              <p className="text-[11px] text-stone-500">
-                Automated triage · SLA timer · KB response drafts · Live stream
-              </p>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              <select value={currentAgent} onChange={(e) => setCurrentAgent(e.target.value)} className="field field-sm" style={{ width: 'auto', fontWeight: 600 }}>
+                {AGENTS.map((a) => <option key={a} value={a}>Desk agent: {a}</option>)}
+              </select>
+
+              <button onClick={handleReset} className="btn btn-ghost"><RotateCcw className="w-4 h-4" /> Reset</button>
+
+              <span className="chip" style={backendConnected ? { color: '#6ee7b7', borderColor: 'rgba(16,185,129,.4)', background: 'rgba(16,185,129,.1)', padding: '.6rem 1rem', fontSize: '.8rem' } : { color: 'var(--mut)', padding: '.6rem 1rem', fontSize: '.8rem' }}>
+                {backendConnected && <span className="live-dot" />}<Server className="w-4 h-4" />{backendConnected ? 'API Connected' : 'Offline Cache'}
+              </span>
+
+              <button onClick={() => setShowCreate((v) => !v)} className="btn btn-primary"><Plus className="w-4 h-4 stroke-[2.5]" /> New Ticket</button>
             </div>
           </div>
+        </header>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={currentAgent}
-              onChange={(e) => setCurrentAgent(e.target.value)}
-              className="px-3 py-1.5 rounded-md bg-[#F6F5F0] border border-stone-300 text-xs font-medium text-stone-800"
-            >
-              {AGENTS.map((a) => <option key={a} value={a}>Desk agent: {a}</option>)}
-            </select>
+        <div className="max-w-[1380px] mx-auto px-5 sm:px-8 py-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Rail: Queue Filters & Summary */}
+          <aside className="lg:col-span-3 space-y-5">
+            <Spot className="glass rail-card rise space-y-1.5" style={stagger(0, 90, 150)}>
+              <div className="eyebrow mb-2.5">Queue Status</div>
+              {['All', ...STATUSES].map((st) => {
+                const count = st === 'All' ? tickets.length : tickets.filter((x) => x.status === st).length;
+                const active = statusFilter === st;
+                return (
+                  <button key={st} onClick={() => setStatusFilter(st)} className={`queue-btn ${active ? 'on' : ''}`}>
+                    <span>{st}</span>
+                    <span className="cnt mono">{count}</span>
+                  </button>
+                );
+              })}
+            </Spot>
 
-            <button
-              onClick={handleReset}
-              className="px-2.5 py-1.5 rounded-md bg-white hover:bg-stone-100 border border-stone-300 text-xs font-medium text-stone-700 inline-flex items-center gap-1"
-            >
-              <RotateCcw className="w-3.5 h-3.5" /> Reset
-            </button>
-
-            <span className={`text-xs px-2.5 py-1.5 rounded-md border inline-flex items-center gap-1.5 font-medium ${backendConnected ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-stone-100 border-stone-300 text-stone-600'}`}>
-              <Server className="w-3.5 h-3.5" />{backendConnected ? 'API Connected' : 'Offline Cache'}
-            </span>
-
-            <button
-              onClick={() => setShowCreate((v) => !v)}
-              className="px-3.5 py-1.5 rounded-md bg-emerald-800 hover:bg-emerald-900 text-xs font-semibold text-white inline-flex items-center gap-1.5 shadow-sm"
-            >
-              <Plus className="w-4 h-4" /> New Ticket
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <div className="max-w-[1380px] mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Rail: Queue Filters & Summary */}
-        <aside className="lg:col-span-3 space-y-4">
-          <div className="bg-white border border-stone-200 rounded-lg p-4 space-y-3">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Queue Status</div>
-            {['All', ...STATUSES].map((st) => {
-              const count = st === 'All' ? tickets.length : tickets.filter((x) => x.status === st).length;
-              const active = statusFilter === st;
-              return (
-                <button
-                  key={st}
-                  onClick={() => setStatusFilter(st)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition ${active ? 'bg-emerald-800 text-white' : 'hover:bg-stone-100 text-stone-700'}`}
-                >
-                  <span>{st}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] ${active ? 'bg-emerald-950/60 text-emerald-100' : 'bg-stone-100 text-stone-600'}`}>{count}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="bg-white border border-stone-200 rounded-lg p-4 space-y-3">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Live SLA Snapshot</div>
-            <div className="flex items-center justify-between py-1.5 border-b border-stone-100 text-xs">
-              <span className="text-stone-600 inline-flex items-center gap-1.5"><Inbox className="w-3.5 h-3.5 text-stone-500" /> Active tickets</span>
-              <span className="font-bold text-stone-900">{openCount}</span>
-            </div>
-            <div className="flex items-center justify-between py-1.5 border-b border-stone-100 text-xs">
-              <span className="text-stone-600 inline-flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 text-red-600" /> Urgent open</span>
-              <span className="font-bold text-red-700">{urgentCount}</span>
-            </div>
-            <div className="flex items-center justify-between py-1.5 text-xs">
-              <span className="text-stone-600 inline-flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" /> Resolved</span>
-              <span className="font-bold text-emerald-800">{resolvedCount}</span>
-            </div>
-          </div>
-        </aside>
-
-        {/* Main Workspace */}
-        <section className="lg:col-span-9 space-y-5">
-          {showCreate && (
-            <form onSubmit={handleCreate} className="bg-white border-2 border-emerald-800/30 rounded-lg p-5 space-y-3 shadow-sm">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold text-stone-900 flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-emerald-800" /> Log Customer Ticket (Auto-Triage Enabled)
-                </h2>
-                <button type="button" onClick={() => setShowCreate(false)} className="text-xs text-stone-500 hover:text-stone-900">Cancel</button>
+            <Spot className="glass rail-card rise" style={stagger(1, 90, 150)}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="eyebrow">Live SLA Snapshot</div>
+                <span className="live-dot" />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Customer name" className="px-3 py-2 rounded-md bg-[#F6F5F0] border border-stone-300 text-stone-900" />
-                <input type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="Customer email" className="px-3 py-2 rounded-md bg-[#F6F5F0] border border-stone-300 text-stone-900" />
-                <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className="px-3 py-2 rounded-md bg-[#F6F5F0] border border-stone-300 text-stone-900">
-                  {AGENTS.map((a) => <option key={a} value={a}>Owner: {a}</option>)}
-                </select>
+              <div className="flex items-center gap-4 py-3" style={{ borderBottom: '1px solid var(--line)' }}>
+                <Ring value={resolutionPct} size={74} stroke={8} colors={['#10b981', '#34d399']}><span className="text-sm font-bold mono">{resolutionPct}%</span></Ring>
+                <div className="text-xs mut leading-relaxed">Resolution rate across all tickets in the queue</div>
               </div>
-              <input type="text" required value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject (e.g., 502 on production webhook or GST invoice request)..." className="w-full px-3 py-2 rounded-md bg-[#F6F5F0] border border-stone-300 text-sm text-stone-900" />
-              <textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Details, error logs, or context..." className="w-full px-3 py-2 rounded-md bg-[#F6F5F0] border border-stone-300 text-sm text-stone-900" />
-              <div className="flex justify-end">
-                <button type="submit" className="px-4 py-2 rounded-md bg-emerald-800 hover:bg-emerald-900 text-xs font-semibold text-white">
-                  Submit Ticket
-                </button>
+              <div className="snap-row">
+                <span className="mut inline-flex items-center gap-2"><Inbox className="w-4 h-4" /> Active tickets</span>
+                <span className="snap-num"><Count value={openCount} /></span>
               </div>
-            </form>
-          )}
-
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
-            {/* Ticket List */}
-            <div className="xl:col-span-5 space-y-3">
-              <div className="relative">
-                <Search className="w-4 h-4 text-stone-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Filter by subject, customer, or topic..."
-                  className="w-full pl-9 pr-3 py-2 rounded-md bg-white border border-stone-300 text-xs text-stone-900"
-                />
+              <div className="snap-row">
+                <span className="mut inline-flex items-center gap-2"><AlertTriangle className="w-4 h-4" style={{ color: '#fb7185' }} /> Urgent open</span>
+                <span className="snap-num" style={{ color: '#fb7185' }}><Count value={urgentCount} /></span>
               </div>
-
-              <div className="space-y-2">
-                {visibleTickets.map((t) => {
-                  const isSel = selectedTicket?.id === t.id;
-                  return (
-                    <button
-                      key={t.id}
-                      onClick={() => setSelectedId(t.id)}
-                      className={`w-full text-left p-3.5 rounded-lg border transition space-y-1.5 ${isSel ? 'bg-white border-emerald-800 ring-1 ring-emerald-800/30' : 'bg-white/80 border-stone-200 hover:bg-white'}`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={`text-[10px] px-2 py-0.5 rounded border font-semibold ${PRIORITY_BADGE[t.priority] || PRIORITY_BADGE.Medium}`}>
-                          {t.priority}
-                        </span>
-                        <span className="text-[11px] font-medium text-emerald-900">{t.category}</span>
-                      </div>
-                      <div className="text-sm font-semibold text-stone-900 line-clamp-1">{t.subject}</div>
-                      <div className="flex items-center justify-between text-[11px] text-stone-500">
-                        <span>{t.customerName} · {t.assignee}</span>
-                        <span className="font-medium text-stone-700">{t.status}</span>
-                      </div>
-                    </button>
-                  );
-                })}
+              <div className="snap-row">
+                <span className="mut inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4" style={{ color: 'var(--g2)' }} /> Resolved</span>
+                <span className="snap-num" style={{ color: 'var(--g2)' }}><Count value={resolvedCount} /></span>
               </div>
-            </div>
+            </Spot>
+          </aside>
 
-            {/* Ticket Detail & Thread */}
-            <div className="xl:col-span-7">
-              {selectedTicket ? (
-                <div className="bg-white border border-stone-200 rounded-lg p-5 space-y-4">
-                  <div className="flex items-start justify-between gap-3 border-b border-stone-200 pb-3.5">
-                    <div>
-                      <div className="text-xs text-stone-500 flex flex-wrap items-center gap-1.5">
-                        <span className="font-mono font-semibold text-emerald-800">{selectedTicket.id}</span>
-                        <span>·</span>
-                        <span>{selectedTicket.customerName}</span>
-                        <span>({selectedTicket.customerEmail})</span>
-                      </div>
-                      <h2 className="text-lg font-bold text-stone-900 mt-1">{selectedTicket.subject}</h2>
-                    </div>
-                    <button onClick={() => handleDelete(selectedTicket.id)} className="text-xs text-red-700 hover:text-red-900 inline-flex items-center gap-1">
-                      <Trash2 className="w-3.5 h-3.5" /> Delete
-                    </button>
-                  </div>
+          {/* Main Workspace */}
+          <section className="lg:col-span-9 space-y-5">
+            {showCreate && (
+              <form onSubmit={handleCreate} className="glass aura modal rounded-3xl p-6 space-y-4" style={{ borderRadius: 24 }}>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base sm:text-lg font-bold flex items-center gap-2"><Sparkles className="w-5 h-5 ai-spark" /> Log Customer Ticket (Auto-Triage Enabled)</h2>
+                  <button type="button" onClick={() => setShowCreate(false)} className="btn btn-ghost btn-sm">Cancel</button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Customer name" className="field" />
+                  <input type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="Customer email" className="field" />
+                  <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className="field">
+                    {AGENTS.map((a) => <option key={a} value={a}>Owner: {a}</option>)}
+                  </select>
+                </div>
+                <input type="text" required value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject (e.g., 502 on production webhook or GST invoice request)..." className="field" />
+                <textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Details, error logs, or context..." className="field" />
+                <div className="flex justify-end">
+                  <button type="submit" className="btn btn-primary">Submit Ticket</button>
+                </div>
+              </form>
+            )}
 
-                  <div className="text-sm text-stone-800 bg-[#F6F5F0] p-3.5 rounded-md border border-stone-200">
-                    {selectedTicket.description || 'No description provided.'}
-                  </div>
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
+              {/* Ticket List */}
+              <div className="xl:col-span-5 space-y-4">
+                <div className="relative rise" style={stagger(0, 80, 350)}>
+                  <Search className="w-4 h-4 mut absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter by subject, customer, or topic..." className="field" style={{ paddingLeft: '2.6rem' }} />
+                </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                    <div>
-                      <label className="text-stone-500 block mb-1 font-medium">Status</label>
-                      <select value={selectedTicket.status} onChange={(e) => handleUpdate(selectedTicket.id, { status: e.target.value })} className="w-full px-2.5 py-1.5 rounded-md bg-[#F6F5F0] border border-stone-300 text-stone-900">
-                        {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-stone-500 block mb-1 font-medium">Priority</label>
-                      <select value={selectedTicket.priority} onChange={(e) => handleUpdate(selectedTicket.id, { priority: e.target.value })} className="w-full px-2.5 py-1.5 rounded-md bg-[#F6F5F0] border border-stone-300 text-stone-900">
-                        {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-stone-500 block mb-1 font-medium">Assignee</label>
-                      <select value={selectedTicket.assignee} onChange={(e) => handleUpdate(selectedTicket.id, { assignee: e.target.value })} className="w-full px-2.5 py-1.5 rounded-md bg-[#F6F5F0] border border-stone-300 text-stone-900">
-                        {AGENTS.map((a) => <option key={a} value={a}>{a}</option>)}
-                      </select>
-                    </div>
-                    <div className="bg-amber-50 border border-amber-200 rounded-md p-2 flex flex-col justify-center">
-                      <span className="text-[10px] text-amber-800 font-medium inline-flex items-center gap-1"><Clock className="w-3 h-3" /> SLA Window</span>
-                      <span className="text-xs font-bold text-amber-950">{selectedTicket.slaHours}h · {selectedTicket.sentiment}</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-3.5 space-y-2">
-                    <div className="flex items-center justify-between gap-2 text-xs">
-                      <span className="font-semibold text-emerald-950 inline-flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-emerald-800" /> Suggested Reply · {selectedTicket.kbTitle}
-                      </span>
-                      <button type="button" onClick={() => setReplyText(selectedTicket.suggestedReply)} className="px-2.5 py-1 rounded bg-emerald-800 hover:bg-emerald-900 text-[11px] font-semibold text-white">
-                        Insert Draft
-                      </button>
-                    </div>
-                    <p className="text-xs text-stone-700 leading-relaxed">{selectedTicket.suggestedReply}</p>
-                  </div>
-
-                  <div className="space-y-2.5 border-t border-stone-200 pt-4">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500">
-                      Conversation ({selectedTicket.replies?.length || 0})
-                    </h3>
-                    <div className="space-y-2 max-h-52 overflow-y-auto">
-                      {(selectedTicket.replies || []).map((r) => (
-                        <div key={r.id} className="p-3 rounded-md bg-[#F6F5F0] border border-stone-200 text-xs space-y-1">
-                          <div className="flex justify-between text-stone-500">
-                            <strong className="text-stone-900">{r.author}</strong>
-                            <span>{new Date(r.createdAt).toLocaleTimeString()}</span>
-                          </div>
-                          <p className="text-stone-800">{r.text}</p>
+                <div className="space-y-3">
+                  {visibleTickets.map((t, i) => {
+                    const isSel = selectedTicket?.id === t.id;
+                    const sla = slaInfo(t, now);
+                    const isUrgent = t.priority === 'Urgent' && t.status !== 'Resolved';
+                    return (
+                      <Spot as="button" key={t.id} onClick={() => setSelectedId(t.id)} className={`glass ticket rise space-y-2 ${isSel ? 'is-active aura' : ''} ${isUrgent ? 'urgent' : ''}`} style={stagger(i, 70, 450)}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`pri pri-${t.priority in PRIORITY_BADGE ? t.priority : 'Medium'}`}>{t.priority}</span>
+                          <span className="text-xs font-semibold" style={{ color: 'var(--g2)' }}>{t.category}</span>
                         </div>
-                      ))}
-                    </div>
-                    <form onSubmit={handleReply} className="flex gap-2">
-                      <input
-                        type="text"
-                        value={replyText}
-                        onChange={(e) => setReplyText(e.target.value)}
-                        placeholder={`Write reply as ${currentAgent}...`}
-                        className="flex-1 px-3 py-2 rounded-md bg-[#F6F5F0] border border-stone-300 text-xs text-stone-900"
-                      />
-                      <button type="submit" className="px-3.5 py-2 rounded-md bg-emerald-800 hover:bg-emerald-900 text-xs font-semibold text-white inline-flex items-center gap-1">
-                        <Send className="w-3.5 h-3.5" /> Send
+                        <div className="text-[15px] font-semibold line-clamp-1" style={{ fontFamily: 'var(--display)' }}>{t.subject}</div>
+                        <div className="flex items-center justify-between text-xs mut">
+                          <span>{t.customerName} · {t.assignee}</span>
+                          <span className="font-semibold" style={{ color: 'var(--ink)' }}>{t.status}</span>
+                        </div>
+                        {sla && (
+                          <div className="sla-line"><i className="bar-grow" style={{ width: `${sla.state === 'done' ? 100 : sla.remainingPct}%`, background: SLA_COLOR[sla.state] }} /></div>
+                        )}
+                      </Spot>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Ticket Detail & Thread */}
+              <div className="xl:col-span-7">
+                {selectedTicket ? (
+                  <div key={selectedTicket.id} className="glass aura detail swap space-y-5">
+                    <div className="flex items-start justify-between gap-3 pb-4" style={{ borderBottom: '1px solid var(--line)' }}>
+                      <div className="min-w-0">
+                        <div className="text-xs mut flex flex-wrap items-center gap-1.5">
+                          <span className="mono font-bold" style={{ color: 'var(--g2)' }}>{selectedTicket.id}</span>
+                          <span>·</span>
+                          <span>{selectedTicket.customerName}</span>
+                          <span>({selectedTicket.customerEmail})</span>
+                        </div>
+                        <h2 className="text-xl sm:text-2xl font-bold mt-1.5 break-words">{selectedTicket.subject}</h2>
+                      </div>
+                      <button onClick={() => handleDelete(selectedTicket.id)} className="btn btn-danger btn-sm shrink-0">
+                        <Trash2 className="w-3.5 h-3.5" /> Delete
                       </button>
-                    </form>
+                    </div>
+
+                    <div className="desc-box text-sm">
+                      {selectedTicket.description || 'No description provided.'}
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div>
+                        <label className="eyebrow block mb-1.5">Status</label>
+                        <select value={selectedTicket.status} onChange={(e) => handleUpdate(selectedTicket.id, { status: e.target.value })} className="field field-sm">
+                          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="eyebrow block mb-1.5">Priority</label>
+                        <select value={selectedTicket.priority} onChange={(e) => handleUpdate(selectedTicket.id, { priority: e.target.value })} className="field field-sm">
+                          {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="eyebrow block mb-1.5">Assignee</label>
+                        <select value={selectedTicket.assignee} onChange={(e) => handleUpdate(selectedTicket.id, { assignee: e.target.value })} className="field field-sm">
+                          {AGENTS.map((a) => <option key={a} value={a}>{a}</option>)}
+                        </select>
+                      </div>
+                      <div className={`sla-tile ${selSla ? (selSla.state === 'breach' ? 'breach' : selSla.state === 'done' ? 'done' : '') : ''}`}>
+                        {selSla && (
+                          <Ring value={selSla.state === 'done' ? 100 : selSla.remainingPct} size={44} stroke={5} colors={[SLA_COLOR[selSla.state], SLA_COLOR[selSla.state]]}>
+                            <Clock className="w-3.5 h-3.5" style={{ color: SLA_COLOR[selSla.state] }} />
+                          </Ring>
+                        )}
+                        <div className="min-w-0">
+                          <span className="text-[10px] font-semibold inline-flex items-center gap-1 mut">{!selSla && <Clock className="w-3 h-3" />} SLA Window</span>
+                          <div className="text-xs font-bold">{selectedTicket.slaHours}h · {selectedTicket.sentiment}</div>
+                          {selSla && <div className="text-[10px] font-semibold mt-0.5" style={{ color: SLA_COLOR[selSla.state] }}>{selSla.label}</div>}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="ai-card space-y-2.5">
+                      <div className="flex items-center justify-between gap-2 text-xs relative z-[1]">
+                        <span className="font-semibold inline-flex items-center gap-1.5" style={{ color: '#a7f3d0' }}>
+                          <Sparkles className="w-4 h-4 ai-spark" /> Suggested Reply · {selectedTicket.kbTitle}
+                        </span>
+                        <button type="button" onClick={() => setReplyText(selectedTicket.suggestedReply)} className="btn btn-primary btn-sm">
+                          Insert Draft
+                        </button>
+                      </div>
+                      <p className="text-sm leading-relaxed relative z-[1]" style={{ color: '#d6efe2' }}>{selectedTicket.suggestedReply}</p>
+                    </div>
+
+                    <div className="space-y-3 pt-4" style={{ borderTop: '1px solid var(--line)' }}>
+                      <h3 className="eyebrow">
+                        Conversation ({selectedTicket.replies?.length || 0})
+                      </h3>
+                      <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                        {(selectedTicket.replies || []).map((r, ri) => (
+                          <div key={r.id} className={`msg slide-left ${r.author === currentAgent ? 'mine' : ''}`} style={stagger(ri, 80, 150)}>
+                            <span className="avatar" style={{ width: 32, height: 32, borderRadius: 11, fontSize: '.68rem' }}>{initialsOf(r.author)}</span>
+                            <div className="bubble">
+                              <div className="bubble-meta">
+                                <strong style={{ color: 'var(--ink)' }}>{r.author}</strong>
+                                <span>{new Date(r.createdAt).toLocaleTimeString()}</span>
+                              </div>
+                              <p>{r.text}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <form onSubmit={handleReply} className="flex gap-2.5">
+                        <input type="text" value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder={`Write reply as ${currentAgent}...`} className="field flex-1" />
+                        <button type="submit" className="btn btn-primary send-btn">
+                          <Send className="w-4 h-4" /> Send
+                        </button>
+                      </form>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="bg-white border border-stone-200 rounded-lg p-8 text-center text-xs text-stone-500">
-                  Select a ticket from the queue.
-                </div>
-              )}
+                ) : (
+                  <div className="glass rounded-3xl p-10 text-center text-sm mut rise">
+                    Select a ticket from the queue.
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
